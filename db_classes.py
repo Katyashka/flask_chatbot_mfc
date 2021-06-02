@@ -34,23 +34,23 @@ class Users(db.Model):
     def __repr__(self):
         s = ""
         if self.surname is not None:
-            s+= f"{self.surname} "
+            s += f"{self.surname} "
         if self.name is not None:
-            s+= f"{self.name} "
+            s += f"{self.name} "
         if self.patronymic is not None:
-            s+= f"{self.patronymic} "
+            s += f"{self.patronymic} "
             # s+=f"\r\n Имя пользователя в telegram: {self.username}\r\n
 
         if len(self.groups) != 0:
             s += "\r\n Роль: "
             for g in self.groups:
                 s += g.name + ', '
-            s=s[:-2:]
+            s = s[:-2:]
             s += "\r\n Сервисы: "
             for g in self.groups:
                 for source in g.sources:
                     s += source.name + ', '
-            s=s[:-2:]
+            s = s[:-2:]
         else:
             s += "\r\nРоль: - "
             s += "\r\nСервисы: - "
@@ -70,7 +70,40 @@ class Groups(db.Model):
     # users = db.relationship('Users', secondary=ug_relations, backref=db.backref('users', lazy='dynamic'))
     sources = db.relationship('Sources', secondary=gs_relations, lazy='subquery', backref=db.backref('groups'))
 
+    def __init__(self,name):
+        self.name = name
+
+    def add_sources(self, sources):
+        if type(sources) is Sources:
+            self.sources.append(sources)
+        else:
+            for s in sources:
+                self.sources.append(s)
+
+
 class Sources(db.Model):
     id = db.Column(db.Integer(), primary_key=True)
     name = db.Column(db.String(255), nullable=False)
     # groups = db.relationship('Groups', secondary=gs_relations, backref=db.backref('groups', lazy='dynamic'))
+
+    def __init__(self, n):
+        self.name = n
+
+def fill_table(app):
+    str_sources = ['СУО Enter', 'Forcase', 'Метрики ЧБ', 'OTRS', 'Сервис проверки статуса']
+    sources = []
+    with app.app_context():
+        for s in str_sources:
+            source = Sources(s)
+            sources.append(source)
+            db.session.add(source)
+            db.session.commit()
+        admin = Groups('администратор')
+        admin.add_sources(sources[0:3])
+        db.session.add(admin)
+        contr = Groups('контролёр')
+        contr.add_sources(sources[2:])
+        db.session.add(contr)
+        db.session.commit()
+        pass
+    pass

@@ -1,11 +1,11 @@
 # https://api.telegram.org/bot1870640059:AAHnqrAfdi2ZbuvTWeN0Xi2WONnYzQRwKzU/sendMessage?chat_id=514563949&text="aaa"
 # https://api.telegram.org/bot1870640059:AAHnqrAfdi2ZbuvTWeN0Xi2WONnYzQRwKzU/setWebhook?url=https://959ca4522465.ngrok.io
 import requests, telebot, time
-from sqlalchemy.sql.functions import current_user
+from sqlalchemy import create_engine
 
 from config import BOT_TOKEN
 from flask import Flask, request
-from db_classes import db, Users, Groups, Sources, ug_relations
+from db_classes import db, Users, Groups, fill_table
 
 bot = telebot.TeleBot(BOT_TOKEN)
 await_info = ''
@@ -22,13 +22,20 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 
 with app.app_context():
+    engine = create_engine(app.config['SQLALCHEMY_DATABASE_URI'])
+    table_names = engine.table_names()
+    is_empty = table_names == []
+    if is_empty:
+        db.create_all()
+        db.session.commit()
+        fill_table(app)
     groups = db.session.query(Groups).all()
 
 
 @app.route('/', methods=['POST'])
 def webhook():
     bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
-    print("process_new_updates")
+    # print("process_new_updates")
     return "ok", 200
 
 

@@ -1,3 +1,6 @@
+.gitignore
+config.py
 /env/
 ngrok.exe
 /.idea/
+test_con.py

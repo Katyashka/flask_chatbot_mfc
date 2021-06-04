@@ -1,16 +1,18 @@
 import telebot, time
 from sqlalchemy import create_engine
 
+import fsm
 from config import BOT_TOKEN
 from flask import Flask, request
 from db_classes import db, Users, Groups, fill_table
+import dbworker
 
 bot = telebot.TeleBot(BOT_TOKEN)
 # await_info = ''
 
 bot.remove_webhook()
 time.sleep(1)
-bot.set_webhook(url="https://7d4f08294bb6.ngrok.io")
+bot.set_webhook(url="https://d8df10750fbd.ngrok.io")
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'a really really really really long secret key'
@@ -37,11 +39,11 @@ def webhook():
     return "ok", 200
 
 
-@bot.message_handler(commands=['edit'])
+@bot.message_handler(commands=['start', 'edit'])
 def edit_user(message):
     try:
         # Проверка на существование записи о таком пользователе
-        user = get_user(message.from_user.id)
+        user = get_user(message.chat.id)
         if user is not None:
             send_user_info(user)
         else:
@@ -53,7 +55,7 @@ def edit_user(message):
 
 def registration(message):
     chat_id = message.chat.id
-    new_user = Users(chat_id, message.from_user.username)
+    new_user = Users(chat_id, message.chat.username)
     save_user_to_db(new_user)
 
 
@@ -70,8 +72,7 @@ def get_user(user_chat_id):
     return None
 
 
-def send_user_info(user_chat_id):
-    user = all_users.filter_by(chat_id=user_chat_id).first()
+def send_user_info(user):
     s = f"{user.username}, проверь, пожалуйста, достоверность информации о себе: "
     s += '\r\n' * 2 + str(user)
     s += '\r\n' * 2 + 'Что добавим/изменим?'
@@ -90,18 +91,21 @@ def send_user_info(user_chat_id):
 def edit_user_surname(call):
     bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id)
     bot.send_message(call.message.chat.id, "Укажи фамилию")
+    dbworker.set_state(call.message.chat.id, fsm.States.S_ENTER_SURNAME.value)
 
 
 @bot.callback_query_handler(func=lambda call: call.data == 'name')
 def edit_user_name(call):
     bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id)
     bot.send_message(call.message.chat.id, "Укажи имя")
+    dbworker.set_state(call.message.chat.id, fsm.States.S_ENTER_NAME.value)
 
 
 @bot.callback_query_handler(func=lambda call: call.data == 'patronymic')
 def edit_user_patronymic(call):
     bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id)
     bot.send_message(call.message.chat.id, "Укажи отчество")
+    dbworker.set_state(call.message.chat.id, fsm.States.S_ENTER_PATRONYMIC.value)
 
 
 @bot.callback_query_handler(func=lambda call: call.data == 'choose_role')
@@ -120,7 +124,7 @@ def edit_user_choose_role(call):
 def edit_user_role(call):
     count = int(call.data)
     role = call.message.json['reply_markup']['inline_keyboard'][count][0]['text']
-    user = get_user(call.message.from_user.id)
+    user = get_user(call.message.chat.id)
     for g in groups:
         if role == g.name:
             user.groups = []
@@ -136,7 +140,7 @@ def edit_user_role(call):
 
 @bot.callback_query_handler(func=lambda call: call.data == 'all')
 def edit_user_all_role(call):
-    user = get_user(call.message.from_user.id)
+    user = get_user(call.message.chat.id)
     user.add_groups(groups)
     save_user_to_db(user)
     bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id)
@@ -154,18 +158,7 @@ def edit_user_all_role(call):
 def save_user_to_db(user):
     try:
         with app.app_context():
-            user_to_save = get_user(user.chat_id)
-            if user_to_save is not None:
-                user_to_save.surname = user.surname
-                user_to_save.name = user.name
-                user_to_save.patronymic = user.patronymic
-                user_to_save.chat_id = user.chat_id
-                user_to_save.username = user.username
-                user_to_save.active = user.active
-                user_to_save.groups = []
-                user_to_save.add_groups(list(user.groups))
-            else:
-                db.session.add(user)
+            db.session.add(user)
             db.session.commit()
             global all_users
             all_users = db.session.query(Users).all()
@@ -173,19 +166,28 @@ def save_user_to_db(user):
         print(e)
 
 
-@bot.message_handler(content_types=['text'])
-def handle_text(message):
-    # global current_user
-    # if await_info == 'surname':
-    #     current_user.surname = message.text
-    #     send_user_info(current_user)
-    # elif await_info == 'name':
-    #     current_user.name = message.text
-    #     send_user_info(current_user)
-    # elif await_info == 'patronymic':
-    #     current_user.patronymic = message.text
-    #     send_user_info(current_user)
-    pass
+@bot.message_handler(func=lambda message: dbworker.get_current_state(message.chat.id) == fsm.States.S_ENTER_SURNAME.value)
+def user_entering_name(message):
+    current_user = get_user(message.chat.id)
+    current_user.surname = message.text
+    save_user_to_db(current_user)
+    send_user_info(current_user)
+
+
+@bot.message_handler(func=lambda message: dbworker.get_current_state(message.chat.id) == fsm.States.S_ENTER_NAME.value)
+def user_entering_name(message):
+    current_user = get_user(message.chat.id)
+    current_user.name = message.text
+    save_user_to_db(current_user)
+    send_user_info(current_user)
+
+
+@bot.message_handler(func=lambda message: dbworker.get_current_state(message.chat.id) == fsm.States.S_ENTER_PATRONYMIC.value)
+def user_entering_name(message):
+    current_user = get_user(message.chat.id)
+    current_user.patronymic = message.text
+    save_user_to_db(current_user)
+    send_user_info(current_user)
 
 
 if __name__ == "__main__":

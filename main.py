@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 import fsm
 from config import BOT_TOKEN
 from flask import Flask, request
-from db_classes import db, Users, Groups, fill_table
+from db_classes import db, Users, Groups, fill_table, Sources
 import dbworker
 
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -12,7 +12,7 @@ bot = telebot.TeleBot(BOT_TOKEN)
 
 bot.remove_webhook()
 time.sleep(1)
-bot.set_webhook(url="https://d8df10750fbd.ngrok.io")
+bot.set_webhook(url="https://6bea79e1f679.ngrok.io")
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'a really really really really long secret key'
@@ -36,6 +36,21 @@ with app.app_context():
 @app.route('/', methods=['POST'])
 def webhook():
     bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
+    return "ok", 200
+
+
+@app.route('/get_bug_info/', methods=['POST'])
+def get_message():
+    source = request.args.get('source')
+    message = request.args.get('message')
+    print('пришел какой-то запрос')
+    users_list = []
+    with app.app_context():
+        source_groups = db.session.query(Sources).filter_by(name=source).first().groups
+        for sg in source_groups:
+            users_list = users_list + sg.users
+        for user in users_list:
+            bot.send_message(user.chat_id, f"Обнаружена ошибка сервиса {source}\r\nТекст ошибки: {message}")
     return "ok", 200
 
 

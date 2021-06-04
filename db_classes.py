@@ -89,6 +89,7 @@ class Sources(db.Model):
     def __init__(self, n):
         self.name = n
 
+
 def fill_table(app):
     str_sources = ['СУО Enter', 'Forcase', 'Метрики ЧБ', 'OTRS', 'Сервис проверки статуса']
     sources = []

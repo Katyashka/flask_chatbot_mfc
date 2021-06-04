@@ -24,15 +24,15 @@ class Users(db.Model):
     groups = db.relationship('Groups', secondary=ug_relations,
                              backref=db.backref('users'), lazy='subquery')
 
-    def __init__(self, surname, name, chat_id, username):
-        self.surname = surname
-        self.name = name
+    def __init__(self, chat_id, username):
         self.chat_id = chat_id
         self.username = username
         pass
 
     def __repr__(self):
-        s = ""
+        s = "ФИО: "
+        if self.surname is None and self.name is None and self.patronymic is None:
+            s+= '-'
         if self.surname is not None:
             s += f"{self.surname} "
         if self.name is not None:

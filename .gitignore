@@ -4,3 +4,4 @@ config.py
 ngrok.exe
 /.idea/
 test_con.py
+states_db.vdb

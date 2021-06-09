@@ -12,7 +12,7 @@ bot = telebot.TeleBot(BOT_TOKEN)
 
 bot.remove_webhook()
 time.sleep(1)
-bot.set_webhook(url="https://6bea79e1f679.ngrok.io")
+bot.set_webhook(url="https://f6842ad014bf.ngrok.io")
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'a really really really really long secret key'
@@ -43,7 +43,6 @@ def webhook():
 def get_message():
     source = request.args.get('source')
     message = request.args.get('message')
-    print('пришел какой-то запрос')
     users_list = []
     with app.app_context():
         source_groups = db.session.query(Sources).filter_by(name=source).first().groups
@@ -98,7 +97,6 @@ def send_user_info(user):
     markup.add(telebot.types.InlineKeyboardButton(text='Отчество', callback_data='patronymic'),
                telebot.types.InlineKeyboardButton(text='Выбрать роль', callback_data='choose_role'))
     markup.add(telebot.types.InlineKeyboardButton(text='Все верно', callback_data='ok'))
-
     bot.send_message(user.chat_id, s, reply_markup=markup)
 
 
@@ -108,12 +106,28 @@ def edit_user_surname(call):
     bot.send_message(call.message.chat.id, "Укажи фамилию")
     dbworker.set_state(call.message.chat.id, fsm.States.S_ENTER_SURNAME.value)
 
+@bot.message_handler(func=lambda message: dbworker.get_current_state(message.chat.id)
+                                          == fsm.States.S_ENTER_SURNAME.value)
+def user_entering_name(message):
+    current_user = get_user(message.chat.id)
+    current_user.surname = message.text
+    save_user_to_db(current_user)
+    send_user_info(current_user)
+
 
 @bot.callback_query_handler(func=lambda call: call.data == 'name')
 def edit_user_name(call):
     bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id)
     bot.send_message(call.message.chat.id, "Укажи имя")
     dbworker.set_state(call.message.chat.id, fsm.States.S_ENTER_NAME.value)
+
+
+@bot.message_handler(func=lambda message: dbworker.get_current_state(message.chat.id) == fsm.States.S_ENTER_NAME.value)
+def user_entering_name(message):
+    current_user = get_user(message.chat.id)
+    current_user.name = message.text
+    save_user_to_db(current_user)
+    send_user_info(current_user)
 
 
 @bot.callback_query_handler(func=lambda call: call.data == 'patronymic')
@@ -181,20 +195,6 @@ def save_user_to_db(user):
         print(e)
 
 
-@bot.message_handler(func=lambda message: dbworker.get_current_state(message.chat.id) == fsm.States.S_ENTER_SURNAME.value)
-def user_entering_name(message):
-    current_user = get_user(message.chat.id)
-    current_user.surname = message.text
-    save_user_to_db(current_user)
-    send_user_info(current_user)
-
-
-@bot.message_handler(func=lambda message: dbworker.get_current_state(message.chat.id) == fsm.States.S_ENTER_NAME.value)
-def user_entering_name(message):
-    current_user = get_user(message.chat.id)
-    current_user.name = message.text
-    save_user_to_db(current_user)
-    send_user_info(current_user)
 
 
 @bot.message_handler(func=lambda message: dbworker.get_current_state(message.chat.id) == fsm.States.S_ENTER_PATRONYMIC.value)
